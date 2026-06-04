@@ -1,0 +1,16 @@
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Keep the folders in proxy but none of its contents
+proxy/resource_packs/*
+proxy/skins/*
+!proxy/resource_packs/.gitkeep
+!proxy/skins/.gitkeep
+
+# System/OS files
+.DS_Store
+Thumbs.db
+**/node_modules/
