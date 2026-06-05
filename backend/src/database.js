@@ -20,6 +20,7 @@ fs.readdirSync(path.join(__dirname, "..", "database")).forEach(file => {
  * Write our object into a json file saved to disk in database/
  * @param {string} name The name of the JSON file
  * @param {Object} object Object of our database to save
+ * @returns {Boolean} Whether or not the save was successful
  */
 function saveDB(name, object) {
     try {
@@ -28,7 +29,8 @@ function saveDB(name, object) {
 
         fs.writeFileSync(file, data, "utf8");
         db[name] = object; // Save to memory
-    } catch {}
+        return true;
+    } catch { return false }
 }
 
 /**

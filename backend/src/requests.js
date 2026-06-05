@@ -2,6 +2,7 @@
 const { exec } = require("child_process");
 const { db, saveDB } = require("./database");
 const { registerWsRequest, sendWS } = require("./websocket");
+const { processLogin } = require("./bans");
 
 /**
  * Checks if an IP address is a VPN and save the result to cache in database/vpns
@@ -33,8 +34,8 @@ async function isVPN(address) {
  * Process and save a player's login packet and cache their info into profiles.json
  * @param {Object} payload LoginInfo struct sent from websocket from the proxy
  */
-registerWsRequest("login", async ({ payload }) => {
-    const { xuid, address, displayName, deviceId } = payload;
+registerWsRequest("login", async (envelope) => {
+    const { xuid, address, displayName, deviceId } = envelepe.payload;
     // console.log("Received login from:", displayName, "(" + address + ")");
 
     // Keep an array of all device IDs and IPs this player logged in with
@@ -53,6 +54,11 @@ registerWsRequest("login", async ({ payload }) => {
     // Persist these changes into disk if program crashes or restarts
     saveDB("profiles", db.profiles);
     saveDB("xuids", db.xuids);
+
+    // Reply to the proxy if this player should be allowed to join
+    envelope.event = "login_response";
+    envelope.payload = processLogin(db.profiles[xuid]);
+    sendWS(envelope);
 });
 
 /**
