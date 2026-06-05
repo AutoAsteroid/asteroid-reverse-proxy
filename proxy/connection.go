@@ -52,7 +52,7 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 	}
 	// Act on the verdict returned from your Node.js backend preprocessing
 	if !status.Allowed {
-		log.Printf("Connection Denied: %s (%s)", username, status.Reason)
+		log.Printf("Connection Denied: %s", username)
 		_ = listener.Disconnect(clientConn, status.Reason)
 		return
 	}

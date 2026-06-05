@@ -35,7 +35,7 @@ async function isVPN(address) {
  * @param {Object} payload LoginInfo struct sent from websocket from the proxy
  */
 registerWsRequest("login", async (envelope) => {
-    const { xuid, address, displayName, deviceId } = envelepe.payload;
+    const { xuid, address, displayName, deviceId } = envelope.payload;
     // console.log("Received login from:", displayName, "(" + address + ")");
 
     // Keep an array of all device IDs and IPs this player logged in with
@@ -45,7 +45,7 @@ registerWsRequest("login", async (envelope) => {
     if (!savedIPs.includes(address)) savedIPs.push(address);
     if (!savedIDs.includes(deviceId)) savedIDs.push(deviceId);
 
-    db.profiles[xuid] = payload;
+    db.profiles[xuid] = envelope.payload;
     db.profiles[xuid].addresses = savedIPs;
     db.profiles[xuid].deviceIDs = savedIDs;
     db.profiles[xuid].vpn = await isVPN(address);

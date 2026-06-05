@@ -4,10 +4,10 @@ const { db, saveDB } = require("./database");
 
 function formatDuration(milliseconds) {
     // Handle infinity and NaN to default to "Forever"
-    if (isFinite(milliseconds) === false) return "Forever";
+    if (Number.isFinite(milliseconds) === false) return "Forever";
 
     // Calculate the total days, hours, minutes, and seconds
-    const totalSeconds = Math.ceil(Math.max(ms, 0) / 1000);
+    const totalSeconds = Math.ceil(Math.max(milliseconds, 0) / 1000);
     const days = Math.floor(totalSeconds / 86400);
     const hours = Math.floor((totalSeconds % 86400) / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -21,11 +21,11 @@ function formatDuration(milliseconds) {
  * Further preprocessing to check if a player is banned or allowed to join the server
  * The proxy uses these responses to determine if the player can dial the server
  */
-function processLogin({ xuid, address, deviceId }) {
+function processLogin({ xuid, address, deviceId, vpn }) {
     // Operator XUIDs listed in operators.json bypass the ban system for safety
     if (db.operators.includes(xuid))
         return { allowed: true, reason: "Operator" };
-    if (profile.vpn === true) 
+    if (vpn === true) 
         return { allowed: false, reason: "VPN or proxies are not allowed." };
 
     // Check if the player is currently banned or if their blacklist has expired
@@ -33,8 +33,9 @@ function processLogin({ xuid, address, deviceId }) {
         const entry = db.blacklist[xuid];
 
         const formatBanEntry = (entry) => [
-            `Banned ${entry.name}: ${entry.reason}`,
-            `Issuer: ${entry.issuer} (${entry.date})`,
+            `You are banned: ${entry.name} (${xuid})`,
+            `Reason: ${entry.reason}`,
+            `Issued By: ${entry.issuer} (${entry.date})`,
             `Duration: ${formatDuration(entry.duration)}`
         ].join("\n");
 
