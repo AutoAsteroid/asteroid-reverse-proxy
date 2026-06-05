@@ -37,13 +37,24 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 
 	ip_address, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
 	log.Printf("Connection: %s (%s) [%s]", username, xuid, ip_address)
-
-	// Process this login request to the backend and save their skin to disk for chat relay
-	if err := ForwardLoginToBackend(&identityData, &clientData, ip_address); err != nil {
-		log.Println("Failed forwarding user login sequence payload:", err)
-	}
-	if err := SaveSkin(clientData.SkinData, identityData.DisplayName); err != nil {
+	
+	// Save the player's skin to disk, used for serving images for the chat relay
+	if err := SaveSkin(clientData.SkinData, username); err != nil {
 		log.Println("Failed to save skin to disk:", err)
+	}
+
+	// Process this login request to the backend and see if they are allowed to join the server
+	status, err := ForwardLoginToBackend(&identityData, &clientData, ip_address)
+	if err != nil {
+		log.Println("Failed forwarding user login sequence payload:", err)
+		_ = listener.Disconnect(clientConn, "Authentication service unavailable.")
+		return
+	}
+	// Act on the verdict returned from your Node.js backend preprocessing
+	if !status.Allowed {
+		log.Printf("Connection Denied: %s (%s)", username, status.Reason)
+		_ = listener.Disconnect(clientConn, status.Reason)
+		return
 	}
 
 	// go http.Get("http://127.0.0.1:4040/playerlist?user=" + url.QueryEscape(username) + "&id=" + identity.TitleID + "&join")

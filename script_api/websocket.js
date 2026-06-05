@@ -116,7 +116,7 @@ export class WebSocketClient {
      * Send an arbitrary websocket request and wait for its response in our onMessage handler event
      * Each request carries its own unique ID so we know which respective promise gets resolved 
      */
-    request(event, target, payload = {}) {
+    request(event, target, payload = {}, timeout = 100) {
         return new Promise((resolve, reject) => {
             // Return nothing if the websocket is currently offline or disconnected
             if (!this.isConnected) return resolve(null);
@@ -130,7 +130,7 @@ export class WebSocketClient {
                     this.pendingRequests.delete(requestId);
                     resolve(null);
                 }
-            }, 100);
+            }, timeout);
 
             this.send({ event, target, id: requestId, payload });
         });

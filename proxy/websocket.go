@@ -5,44 +5,24 @@ import (
     "time"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"net/http"
 	"log"
 
 	"github.com/gorilla/websocket"
-	"github.com/sandertv/gophertunnel/minecraft/protocol"
-	"github.com/sandertv/gophertunnel/minecraft/protocol/login"
 )
 
 // This serves as our middle man to handle multiple concurrent websocket connextions for our applications
 // Any one client can request from another connected app, rather than being limited to point to point
 // This avoids a P2P mesh where every app needs to make its own WS connection to each other app (N^2)
-
-type LoginInfo struct {
-	XUID       	string 					`json:"xuid"`
-	DisplayName string 					`json:"displayName"`
-	Identity   	string 					`json:"identity"`
-	TitleID    	string 					`json:"titleId"`
-	Address		string					`json:"address"`
-
-	SkinID           string 			`json:"skinId"`
-	SelfSignedID     string 			`json:"selfSignedId"`
-	PlayFabID        string 			`json:"playFabId"`
-	PlatformType     int    			`json:"platformType"`
-	MaxViewDistance  int    			`json:"maxViewDistance"`
-	MemoryTier       int    			`json:"memoryTier"`
-	DeviceModel      string 			`json:"deviceModel"`
-	DeviceID         login.DeviceID 	`json:"deviceId"`
-	DeviceOS         protocol.DeviceOS 	`json:"deviceOS"`
-	DefaultInputMode int    			`json:"defaultInputMode"`
-	CurrentInputMode int    			`json:"currentInputMode"`
-	ClientRandomID   int64  			`json:"clientRandomId"`
-	Platform         string 			`json:"platform"`
-}
-
 var (
 	// Track WebSocket connections and mutex for safe concurrent access
     wsConns = make(map[string]*websocket.Conn)
     wsMu sync.Mutex
+
+	// Track the state of outbound websocket requests to clients
+	id_counter uint64
+	pendingRequests	sync.Map
 
     upgrader = websocket.Upgrader{
         ReadBufferSize:  1024,
@@ -50,24 +30,6 @@ var (
         CheckOrigin:     func(r *http.Request) bool { return true },
     }
 )
-
-var DeviceOSMap = map[protocol.DeviceOS]string{
-    1:  "Android",
-    2:  "IOS",
-    3:  "MacOS",
-    4:  "FireOS",
-    5:  "GearVR",
-    6:  "Hololens",
-    7:  "Windows10",
-    8:  "Windows32",
-    9:  "Dedicated Server",
-    10: "TVOS",
-    11: "PlayStation",
-    12: "Nintendo Switch",
-    13: "Xbox",
-    14: "Windows Phone",
-    15: "Linux",
-}
 
 // Normalized WebSocket message structure to maintain a consistent format for all events sent across the WebSocket bridge
 type WSEnvelope struct {
@@ -99,7 +61,14 @@ func listenToClient(clientType string, conn *websocket.Conn) {
 		if err := json.Unmarshal(message, &envelope); err != nil {
 			continue
 		}
-		// Check if this request is meant to be handled internally or routed
+
+		// Intercept and check if this fulfills an outbound request the proxy made
+		if ch, found := pendingRequests.Load(envelope.ID); found {
+			ch.(chan json.RawMessage) <- envelope.Payload
+			continue 
+		}
+
+		// Check if this request is meant to be handled internally instead of rerouted
 		if ignore := handleInternalRequest(&envelope); ignore {
             continue
         }
@@ -161,59 +130,56 @@ func handleInternalRequest(envelope *WSEnvelope) bool {
 	return false // Pass the payload along to reroute normally
 }
 
-func SendWebSocketEvent(target string, event string, data interface{}) error {
+func SendWebSocketEvent(envelope *WSEnvelope) error {
 	// Fetch the target client's WebSocket connection from the registry and process it safely
 	wsMu.Lock()
-	targetConn, online := wsConns[target]
+	targetConn, online := wsConns[envelope.Target]
 	wsMu.Unlock()
 
 	// If the requested websocket hasn't connected to our proxy yet, fail immediately
 	if !online {
-		return fmt.Errorf("target client '%s' is offline or not registered", target)
+		return fmt.Errorf("target client '%s' is offline or not registered", envelope.Target)
 	}
+	envelope.Timestamp = time.Now().UnixMilli()
 
-	// Marshal our data payload into raw JSON bytes to satisfy json.RawMessage
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload for event '%s': %w", event, err)
-	}
-
-	envelope := WSEnvelope{
-		Event:     event,
-		Target:    target, // Target client will see themselves as the final destination
-		Timestamp: time.Now().UnixMilli(),
-		Payload:   payload,
-	}
-
-	// Transmit the JSON payload specifically down the targeted client's socket pipe
+	// Transmit the JSON payload specifically down the targeted client socket pipe
 	if err := targetConn.WriteJSON(envelope); err != nil {
-		return fmt.Errorf("failed to transmit event '%s' to '%s': %w", event, target, err)
+		return fmt.Errorf("failed to transmit event '%s' to '%s': %w", envelope.Event, envelope.Target, err)
 	}
 	return nil
 }
 
-func ForwardLoginToBackend(identity *login.IdentityData, client *login.ClientData, address string) error {
-	// Simplify identity data and client data into a unified JSON structure
-	loginInfo := LoginInfo{
-		XUID:             identity.XUID,
-		DisplayName:      identity.DisplayName,
-		Identity:         identity.Identity,
-		TitleID:          identity.TitleID,
-		Address:          address,
-		SkinID:           client.SkinID,
-		SelfSignedID:     client.SelfSignedID,
-		PlayFabID:        client.PlayFabID,
-		PlatformType:     client.PlatformType,
-		MaxViewDistance:  client.MaxViewDistance,
-		MemoryTier:       client.MemoryTier,
-		DeviceModel:      client.DeviceModel,
-		DeviceID:         client.DeviceID,
-		DeviceOS:         client.DeviceOS,
-		DefaultInputMode: client.DefaultInputMode,
-		CurrentInputMode: client.CurrentInputMode,
-		ClientRandomID:   client.ClientRandomID,
-		Platform:		  DeviceOSMap[client.DeviceOS],
+func RequestWS[T any](target string, event string, data interface{}, timeout time.Duration) (*T, error) {
+	// Send a unique ID for this request back to the proxy so that we know if
+	requestID := fmt.Sprintf("proxy:%d", atomic.AddUint64(&id_counter, 1))
+
+	// Save this request for the websocket client to fulfill with a reply back
+	responseChan := make(chan json.RawMessage, 1)
+	pendingRequests.Store(requestID, responseChan)
+	defer pendingRequests.Delete(requestID)
+
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload for event '%s': %w", event, err)
 	}
-	// Send to NodeJS server for preprocessing
-	return SendWebSocketEvent("backend", "login", &loginInfo)
+
+	// Send our websocket envelope to the target client with our payload and request ID
+	envelope := WSEnvelope{ ID: requestID, Event: event, Target: target, Payload: payload }
+	if err := SendWebSocketEvent(&envelope); err != nil {
+		return nil, err
+	}
+
+	// Wait for our response channel to receive its reply back from target client
+	select {
+	case rawResponse := <-responseChan:
+		var payload T
+		if err := json.Unmarshal(rawResponse, &payload); err != nil {
+			return nil, fmt.Errorf("failed to parse response type: %w", err)
+		}
+		// The response is already the payload, not WSEnvelope
+		return &payload, nil
+
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("request '%s' (%s) timed out", event, requestID)
+	}
 }
