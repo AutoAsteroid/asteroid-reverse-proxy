@@ -22,7 +22,7 @@ var (
     playerpingMu sync.RWMutex
 
 	// Client connections storing every minecraft connection
-	playerSessions   = make(map[string]PlayerSession)
+	playerSessions = make(map[string]PlayerSession)
 	playerSessionsMu sync.RWMutex
 )
 

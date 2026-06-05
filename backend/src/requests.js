@@ -1,7 +1,7 @@
 
 const { exec } = require("child_process");
 const { db, saveDB } = require("./database");
-const { registerWsRequest } = require("./websocket");
+const { registerWsRequest, sendWS } = require("./websocket");
 
 /**
  * Checks if an IP address is a VPN and save the result to cache in database/vpns
@@ -33,7 +33,7 @@ async function isVPN(address) {
  * Process and save a player's login packet and cache their info into profiles.json
  * @param {Object} payload LoginInfo struct sent from websocket from the proxy
  */
-registerWsRequest("login", ({ payload }) => {
+registerWsRequest("login", async ({ payload }) => {
     const { xuid, address, displayName, deviceId } = payload;
     // console.log("Received login from:", displayName, "(" + address + ")");
 
@@ -47,7 +47,7 @@ registerWsRequest("login", ({ payload }) => {
     db.profiles[xuid] = payload;
     db.profiles[xuid].addresses = savedIPs;
     db.profiles[xuid].deviceIDs = savedIDs;
-    db.profiles[xuid].vpn = isVPN(address);
+    db.profiles[xuid].vpn = await isVPN(address);
     db.xuids[displayName] = xuid;
 
     // Persist these changes into disk if program crashes or restarts
@@ -59,9 +59,41 @@ registerWsRequest("login", ({ payload }) => {
  * Send a command directly into the BDS server console, allowing for commands such as:
  * /stop, /allowlist, and all other owner level permission commands like op and deop
  */
-registerWsRequest("run_console", ({ payload: { command } }) => {
+registerWsRequest("run_console", (envelope) => {
     // Clean command and send into the assumed screen session "kitpvp"
-    const safeCommand = command.replace(/"/g, '\\"');
+    const safeCommand = envelope.payload.replace(/"/g, '\\"');
     const fullCommand = `screen -S kitpvp -X stuff "${safeCommand}\\n"`;
     exec(fullCommand);
+});
+
+/**
+ * Return a cached player login packet directly from memory
+ * In my use case I use this for my scripts to process logins and bans
+ */
+registerWsRequest("get_profile", (envelope) => {
+    const xuid = db.xuids[envelope.payload];
+    envelope.event = "get_profile_response";
+    envelope.payload = db.profiles[xuid];
+    sendWS(envelope);
+});
+
+// Allow script API to access and edit the backend databases
+// Without needing to load the entire DB with readJSONFile()
+registerWsRequest("get_db_key", (envelope) => {
+    const { file, key } = envelope.payload;
+    console.log(file, key)
+
+    db[file] ??= {};
+    envelope.event = "get_db_key_response";
+    envelope.payload = db[file][key];
+    console.log(db[file][key])
+    console.log(envelope)
+    sendWS(envelope);
+});
+
+registerWsRequest("set_db_key", (envelope) => {
+    const { file, key, object } = envelope.payload;
+    db[file] ??= {};
+    db[file][key] = object;
+    saveDB(file, db[file]);
 });

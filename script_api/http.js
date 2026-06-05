@@ -24,7 +24,7 @@ export async function requestUrl(url) {
  * @param {string} command The command to run in the server console screen
  */
 export async function runConsole(command) {
-    sendWS({ event: "run_console", target: "backend", payload: { command } });
+    sendWS({ event: "run_console", target: "backend", payload: command });
 }
 
 /**
