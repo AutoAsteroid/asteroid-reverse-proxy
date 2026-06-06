@@ -6,13 +6,13 @@ const { formatDuration } = require("./utils");
  * Further preprocessing to check if a player is banned or allowed to join the server
  * The proxy uses these responses to determine if the player can dial the server
  */
-function processLogin({ xuid, address, deviceId, vpn, titleId }) {
+function processLogin({ xuid, address, deviceId, vpn, titleId, maxViewDistance }) {
     // Operator XUIDs listed in operators.json bypass the ban system for safety
     if (db.operators.includes(xuid))
         return { allowed: true, reason: "Operator" };
 
     // titleId is missing from legitimate connections in offline mode. Bots seem to still have it
-    if (titleId === "")
+    if (titleId === "" || maxViewDistance === 0)
         return { allowed: false, reason: "Unauthorized" };
     if (vpn === true) 
         return { allowed: false, reason: "VPN or proxies are not allowed." };

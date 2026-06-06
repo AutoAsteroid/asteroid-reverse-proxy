@@ -1,6 +1,6 @@
 
 const { MessageFlags, EmbedBuilder } = require("discord.js");
-const { sendCommandToScreen } = require("./utils.js");
+const { runConsole } = require("./utils.js");
 const { requestWS } = require("./websocket.js");
 
 const commands = new Map();
@@ -32,7 +32,7 @@ commands.set("console", async (interaction) => {
 
     // Semi colons represent separation between multiple chained commands
     const command = interaction.options.getString("command");
-    sendCommandToScreen("kitpvp", command.replaceAll(";", "\n"));
+    runConsole(command.replaceAll(";", "\n"), "kitpvp");
     await interaction.reply(`Successfully sent \`${command}\` into console.`);
 });
 
