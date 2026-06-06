@@ -18,9 +18,7 @@ registerWsRequest("get_players", (envelope) => {
 });
 
 registerWsRequest("message", (envelope) => {
-    const { message, sound } = envelope.payload;
-    world.sendMessage(message);
-    world.getPlayers().forEach(player => player.playSound(sound));
+    world.sendMessage(envelope.payload);
 });
 
 /**

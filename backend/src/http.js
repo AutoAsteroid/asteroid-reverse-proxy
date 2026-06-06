@@ -4,8 +4,11 @@ const fs = require("fs");
 const { exec, spawn } = require("child_process");
 const { db, parseJSON, saveDB } = require("./database");
 
-// Load our environment variables and secrets
-require("dotenv").config();
+// Load our environment variables and import rest of project files
+require("dotenv").config({ quiet: true });
+require("./websocket");
+require("./requests");
+require("./database");
 
 const HTTP_METHODS = new Map();
 

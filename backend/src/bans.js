@@ -6,26 +6,31 @@ const { formatDuration } = require("./utils");
  * Further preprocessing to check if a player is banned or allowed to join the server
  * The proxy uses these responses to determine if the player can dial the server
  */
-function processLogin({ xuid, address, deviceId, vpn }) {
+function processLogin({ xuid, address, deviceId, vpn, titleId }) {
     // Operator XUIDs listed in operators.json bypass the ban system for safety
     if (db.operators.includes(xuid))
         return { allowed: true, reason: "Operator" };
+
+    // titleId is missing from legitimate connections in offline mode. Bots seem to still have it
+    if (titleId === "")
+        return { allowed: false, reason: "Unauthorized" };
     if (vpn === true) 
         return { allowed: false, reason: "VPN or proxies are not allowed." };
 
     // Check if the player is currently banned or if their blacklist has expired
     if (xuid in db.blacklist) {
         const entry = db.blacklist[xuid];
+        const duration = entry.duration ?? Infinity;
 
         const formatBanEntry = (entry) => [
             `You are banned: ${entry.name} (${xuid})`,
             `Reason: ${entry.reason}`,
             `Issued By: ${entry.issuer} (${entry.date})`,
-            `Duration: ${formatDuration(entry.duration)}`
+            `Duration: ${formatDuration(duration - Date.now())}`
         ].join("\n");
 
         // Null duration means permanent because infinity cannot JSON serialize
-        if (entry.duration === null || entry.duration - Date.now() > 0)
+        if (duration === Infinity || duration - Date.now() > 0)
             return { allowed: false, reason: formatBanEntry(entry) };
 
         // The ban expired, remove it from the blacklist asynchronously
@@ -53,13 +58,13 @@ function processLogin({ xuid, address, deviceId, vpn }) {
  * @param {number} duration The duration in milliseconds this ban will last
  * @returns {Boolean} Whether or not the ban was successful
  */
-function blacklist(name, issuer, reason, duration = Infinity) {
+function blacklist(name, issuer, reason, duration = null) {
     if (name in db.xuids === false) return false;
     const xuid = db.xuids[name];
     
     // Construct the blacklist object and save it into database/blacklist.json
     const date = new Date().toLocaleString("en-US");
-    const unbanDate = duration === Infinity ? null : Date.now() + duration;
+    const unbanDate = duration === null ? null : Date.now() + duration;
 
     db.blacklist[xuid] = { name, issuer, reason, duration: unbanDate, date };
     return saveDB("blacklist", db.blacklist);

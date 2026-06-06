@@ -165,8 +165,7 @@ class WebSocketClient {
 
 // Connect to the central websocket hub provided a token if needed
 const TOKEN = "";
-const Client = new WebSocketClient()
-    .connect("backend", "ws://127.0.0.1:8080/ws", TOKEN); 
+const Client = new WebSocketClient().connect("backend", "ws://127.0.0.1:8080/ws", TOKEN); 
 
 // Expose arbitrary outbound websocket requests to the rest of the program
 function requestWS(event, target, payload = {}) {
@@ -184,7 +183,3 @@ function registerWsRequest(event, callback) {
 }
 
 module.exports = { requestWS, sendWS, registerWsRequest, WebSocketClient };
-
-require("./http");
-require("./requests");
-require("./database");
