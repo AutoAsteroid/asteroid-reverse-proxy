@@ -1,21 +1,6 @@
 
 const { db, saveDB } = require("./database");
-
-
-function formatDuration(milliseconds) {
-    // Handle infinity and NaN to default to "Forever"
-    if (Number.isFinite(milliseconds) === false) return "Forever";
-
-    // Calculate the total days, hours, minutes, and seconds
-    const totalSeconds = Math.ceil(Math.max(milliseconds, 0) / 1000);
-    const days = Math.floor(totalSeconds / 86400);
-    const hours = Math.floor((totalSeconds % 86400) / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    // Return the formatted millisecond duration
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-}
+const { formatDuration } = require("./utils");
 
 /**
  * Further preprocessing to check if a player is banned or allowed to join the server

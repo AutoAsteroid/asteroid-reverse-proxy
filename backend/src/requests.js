@@ -1,34 +1,8 @@
 
-const { exec } = require("child_process");
 const { db, saveDB } = require("./database");
 const { registerWsRequest, sendWS } = require("./websocket");
-const { processLogin } = require("./bans");
-
-/**
- * Checks if an IP address is a VPN and save the result to cache in database/vpns
- * @param {string} address IPv4 string of address to check if is detected as a VPN
- * @returns {boolean} If the address is a VPN from cache or from IPData API
- */
-async function isVPN(address) {
-    // Return cached calue if this address was processed before to save api calls
-    if (address in db.vpns) return db.vpns[address];
-
-    // You can get your own FREE token at https://dashboard.ipdata.co/
-    const IPDATA_KEY = process.env.IPDATA_KEY;
-    try {
-        // Call IPDATA API to check if this address is a VPN
-        const url = `https://api.ipdata.co/${address}?api-key=${IPDATA_KEY}`;
-        const ipdata = await fetch(url); 
-        const ipJSON = await ipdata.json();
-        const threat = ipJSON.threat ?? {};
-
-        // Count as a VPN if any threat is true (proxy, tor, etc..)
-        db.vpns[address] = Object.values(threat).some(v => v === true);
-        saveDB("vpns", db.vpns);
-    } catch {}
-
-    return db.vpns[address];
-}
+const { processLogin, blacklist, unblacklist } = require("./bans");
+const { runConsole, isVPN, messageServer, syncIcon } = require("./utils");
 
 /**
  * Process and save a player's login packet and cache their info into profiles.json
@@ -49,6 +23,7 @@ registerWsRequest("login", async (envelope) => {
     db.profiles[xuid].addresses = savedIPs;
     db.profiles[xuid].deviceIDs = savedIDs;
     db.profiles[xuid].vpn = await isVPN(address);
+    db.profiles[xuid].icon = await syncIcon(displayName);
     db.xuids[displayName] = xuid;
 
     // Persist these changes into disk if program crashes or restarts
@@ -66,10 +41,8 @@ registerWsRequest("login", async (envelope) => {
  * /stop, /allowlist, and all other owner level permission commands like op and deop
  */
 registerWsRequest("run_console", (envelope) => {
-    // Clean command and send into the assumed screen session "kitpvp"
-    const safeCommand = envelope.payload.replace(/"/g, '\\"');
-    const fullCommand = `screen -S kitpvp -X stuff "${safeCommand}\\n"`;
-    exec(fullCommand);
+    // In my use case, I assume my BDS server is in the screen "kitpvp"
+    runConsole(envelope.payload, "kitpvp");
 });
 
 /**
@@ -83,8 +56,17 @@ registerWsRequest("get_profile", (envelope) => {
     sendWS(envelope);
 });
 
-// Allow script API to access and edit the backend databases
-// Without needing to load the entire DB with readJSONFile()
+registerWsRequest("get_ban", (envelope) => {
+    const xuid = db.xuids[envelope.payload];
+    envelope.event = "get_ban_response";
+    envelope.payload = db.blacklist[xuid];
+    sendWS(envelope);
+});
+
+/**
+ * Allow script API to access and edit the backend databases
+ * Without needing to load the entire DB with readJSONFile()
+ */
 registerWsRequest("get_db_key", (envelope) => {
     const { file, key } = envelope.payload;
     console.log(file, key)
@@ -92,8 +74,6 @@ registerWsRequest("get_db_key", (envelope) => {
     db[file] ??= {};
     envelope.event = "get_db_key_response";
     envelope.payload = db[file][key];
-    console.log(db[file][key])
-    console.log(envelope)
     sendWS(envelope);
 });
 
@@ -102,4 +82,22 @@ registerWsRequest("set_db_key", (envelope) => {
     db[file] ??= {};
     db[file][key] = object;
     saveDB(file, db[file]);
+});
+
+/**
+ * Allow other websocket clients to make requests and changes to the blacklist
+ * The requesting client will get a boolean representing success or failure
+ */
+registerWsRequest("blacklist", (envelope) => {
+    const { name, issuer, reason, duration } = envelope.payload;
+    envelope.event = "blacklist_response";
+    envelope.payload = blacklist(name, issuer, reason, duration);
+    sendWS(envelope);
+});
+
+registerWsRequest("unblacklist", (envelope) => {
+    const { name, issuer, reason } = envelope.payload;
+    envelope.event = "unblacklist_response";
+    envelope.payload = unblacklist(name, issuer, reason);
+    sendWS(envelope);
 });

@@ -64,3 +64,15 @@ export async function writeJSONFile(file, json) {
         .then(() => true)
         .catch(() => false);
 }
+
+/**
+ * Manage the blacklist on the backend. Duration should be in milliseconds
+ * Return values represent whether the action was successful or unsuccessful
+ */
+export async function blacklist(name, issuer, reason, duration) {
+    return await requestWS("blacklist", "backend", { name, issuer, reason, duration });
+}
+
+export async function unblacklist(name, issuer, reason) {
+    return await requestWS("unblacklist", "backend", { name, issuer, reason });
+}

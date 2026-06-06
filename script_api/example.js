@@ -17,6 +17,12 @@ registerWsRequest("get_players", (envelope) => {
     sendWS(envelope);
 });
 
+registerWsRequest("message", (envelope) => {
+    const { message, sound } = envelope.payload;
+    world.sendMessage(message);
+    world.getPlayers().forEach(player => player.playSound(sound));
+});
+
 /**
  * Read a file in the backend JSON data base and write back to it
  * This uses plain http because websockets seem to struggle here

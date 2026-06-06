@@ -1,7 +1,7 @@
 package main
 
 // A Minecraft Bedrock Edition reverse proxy implemented using the Gophertunnel library.
-// This proxy was created by https://www.github.com/AutoAsteroid
+// This proxy was created by https://github.com/AutoAsteroid/asteroid-reverse-proxy/
 // GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o proxy
 
 import (
@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/caarlos0/env/v10"
 	"github.com/joho/godotenv"
@@ -69,77 +68,67 @@ func readResourcePacks() []*resource.Pack {
 }
 
 func main() {
-	log.Println("Starting up gophertunnel reverse proxy server!")
+	log.Println("Starting up gophertunnel reverse proxy and websocket server!")
 
-	go func() {
-		// Serve skin files from the "skins" directory on disk at the "/skins/" endpoint
-		http.HandleFunc("/skins/", func(w http.ResponseWriter, r *http.Request) {
-			filePath := filepath.Join("./skins", r.URL.Path[len("/skins/"):])
-			if _, err := os.Stat(filePath); os.IsNotExist(err) {
-				http.Error(w, "File not found", http.StatusNotFound)
-				return
-			}
-			http.ServeFile(w, r, filePath)
-		})
-
-		// WebSocket endpoint for the in game script API to connect to for proxy communication
-		http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-			// Make sure that the websocket connection is only coming from localhost
-			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				http.Error(w, "Forbidden", http.StatusForbidden)
-				return
-			}
-
-			// Only allow localhost connections if no WsToken is provided in the .env file
-			if config.WsToken == "" && host != "127.0.0.1" && host != "::1" && host != "localhost" {
-				http.Error(w, "WebSocket access is restricted to localhost.", http.StatusUnauthorized)
-				return
-			}
-
-			clientType := r.URL.Query().Get("client")
-			wsAuthToken := r.URL.Query().Get("token")
-
-			// Make sure the request is authorized to connect to our WebSocket hub if provided a token
-			if config.WsToken != "" && wsAuthToken != config.WsToken {
-				http.Error(w, "WebSocket access unauthorized.", http.StatusUnauthorized)
-				return
-			}
-			
-			// Upgrade the HTTP connection to a WebSocket connection
-			conn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				log.Println("WebSocket upgrade failed:", err)
-				return
-			}
-
-			// Figure out WHO is connecting to the websocket (e.g. discord, script_api)
-			if clientType == "" {
-				log.Println("Rejected anonymous connection (missing client parameter)")
-				conn.Close()
-				return
-			}
-
-			// Register this WebSocket connection into our central registry for other clients
-			log.Printf("Successfully registered websocket: \"%s\"", clientType)
-			wsMu.Lock()
-			wsConns[clientType] = conn
-			wsMu.Unlock()
-
-			// Listen to this WebSocket for incoming messages in a separate goroutine
-			go listenToClient(clientType, conn)
-		})
-
-		// Listen and serve the HTTP and websocket server on port 8080
-		log.Printf("HTTP and WS server running on port 8080")
-		if err := http.ListenAndServe("0.0.0.0:8080", nil); err != nil {
-			log.Fatal(err)
+	// Handle WebSocket endpoint for the in game script API to connect to for proxy communication
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// Make sure that the websocket connection is only coming from localhost
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
 		}
-	}()
+
+		// Only allow localhost connections if no WsToken is provided in the .env file
+		if config.WsToken == "" && host != "127.0.0.1" && host != "::1" && host != "localhost" {
+			http.Error(w, "WebSocket access is restricted to localhost.", http.StatusUnauthorized)
+			return
+		}
+
+		clientType := r.URL.Query().Get("client")
+		wsAuthToken := r.URL.Query().Get("token")
+
+		// Make sure the request is authorized to connect to our WebSocket hub if provided a token
+		if config.WsToken != "" && wsAuthToken != config.WsToken {
+			http.Error(w, "WebSocket access unauthorized.", http.StatusUnauthorized)
+			return
+		}
+		
+		// Upgrade the HTTP connection to a WebSocket connection
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("WebSocket upgrade failed:", err)
+			return
+		}
+
+		// Figure out WHO is connecting to the websocket (e.g. discord, script_api)
+		if clientType == "" {
+			log.Println("Rejected anonymous connection (missing client parameter)")
+			conn.Close()
+			return
+		}
+
+		// Register this WebSocket connection into our central registry for other clients
+		log.Printf("Successfully registered websocket: \"%s\"", clientType)
+		wsMu.Lock()
+		wsConns[clientType] = conn
+		wsMu.Unlock()
+
+		// Listen to this WebSocket for incoming messages in a separate goroutine
+		go listenToClient(clientType, conn)
+	})
 
 	if config.WsToken == "" {
 		log.Printf("WebSocket connections are locked to localhost.")
 	}
+
+	go func() {
+		// Listen and serve the websocket server on port 8080
+		log.Printf("WebSocket server listening on port 8080.")
+		if err := http.ListenAndServe("0.0.0.0:8080", nil); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// Setup a foreign status provider to mirror the remote target server's status for the proxy
 	statusProvider, err := minecraft.NewForeignStatusProvider(config.RemoteAddr)
