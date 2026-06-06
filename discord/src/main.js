@@ -6,6 +6,11 @@ const relay = require("./relay");
 // Load environment variables that includes our discord bot token to load our commands
 require("dotenv").config({ quiet: true });
 
+// Closed source, private image generating player list channel
+try {
+    require("../private/playerlist");
+} catch {}
+
 const client = new Client({ 
     presence: { 
         status: "online", 
@@ -24,8 +29,8 @@ const client = new Client({
 // Bot boot up diagnostics and slash command lister
 client.on(Events.ClientReady, () => {
     const { username, displayName, createdAt, tag, id } = client.user;
-    console.log(`Discord connected: ${tag} ${username} (${displayName})`);
-    console.log(`Account created: ${createdAt.toLocaleString()} (${id})`);
+    console.log(`Discord connected: ${username} (${id})`);
+    console.log(`Account created: ${createdAt.toLocaleString()}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -45,3 +50,5 @@ client.on(Events.MessageCreate, relay);
 
 // Login in to the bot using our environment variable token!
 client.login(process.env.DISCORD_TOKEN);
+
+module.exports = client;
