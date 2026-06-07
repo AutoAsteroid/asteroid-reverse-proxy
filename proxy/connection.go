@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync"
 	"time"
-
+	
 	"github.com/sandertv/gophertunnel/minecraft"
 )
 
@@ -22,7 +22,7 @@ var (
     playerpingMu sync.RWMutex
 
 	// Client connections storing every minecraft connection
-	playerSessions = make(map[string]PlayerSession)
+	playerSessions = make(map[string]*PlayerSession)
 	playerSessionsMu sync.RWMutex
 )
 
@@ -57,8 +57,6 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 		return
 	}
 
-	// go http.Get("http://127.0.0.1:4040/playerlist?user=" + url.QueryEscape(username) + "&id=" + identity.TitleID + "&join")
-	// go http.Get("http://127.0.0.1:4040/playerlist?user=" + url.QueryEscape(username) + "&leave")
 	// Connect to the backend target server with their login info since our server is in offline mode
 	serverConn, err := minecraft.Dialer{
 		ClientData:   clientData,   
@@ -104,9 +102,9 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 	}()
 	wg.Wait()
 
-	// Register pointers to both the client connection and player connection 
+	// Register pointers to both the client connection and player connection
 	playerSessionsMu.Lock()
-	playerSessions[username] = PlayerSession{
+	playerSessions[username] = &PlayerSession{
 		ClientConn: clientConn,
 		ServerConn: serverConn,
 		JoinDate:	time.Now(),
@@ -124,6 +122,7 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 			if err := serverConn.WritePacket(pk); err != nil {
 				return
 			}
+			// LogMinecraftPacket(pk, "Server")
 		}
 	}()
 	// Server connection read loop to forward packets from the backend server to the client
@@ -137,6 +136,7 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 			if err := clientConn.WritePacket(pk); err != nil {
 				return
 			}
+			// LogMinecraftPacket(pk, "Client")
 		
 			// Update this players ping that can be requested in a websocket call
 			playerpingMu.Lock()

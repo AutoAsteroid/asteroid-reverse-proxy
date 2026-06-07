@@ -49,3 +49,25 @@ system.runInterval(async () => {
         scoreboard.setScore(player, ping[player.name]);
     }
 }, 20);
+
+/**
+ * This function is not complete and only imitates the player swinging
+ */
+Player.prototype.attack = function() {
+    const hitPacket = {
+        name: "Animate",
+        payload: {
+            "ActionType": 1,        
+            "EntityRuntimeID": 0, // Unique per session, proxy handles this
+            "Data": 0,
+            "SwingSource": 5
+        }
+    };
+
+    // Send the packet out via WebSocket targeting this player's session
+    sendWS({ 
+        event: "send_client_packet", 
+        target: this.name, 
+        payload: hitPacket 
+    });
+};

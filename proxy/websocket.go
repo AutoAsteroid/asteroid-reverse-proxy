@@ -110,7 +110,10 @@ func listenToClient(clientType string, conn *websocket.Conn) {
 
 // handleInternalRequest checks if an incoming message is meant for the proxy itself.
 // Returns true to drop/ignore the packet, or false if it should be rerouted.
-func handleInternalRequest(envelope *WSEnvelope) bool {
+func handleInternalRequest(envelope *WSEnvelope) (drop bool) {
+	// Any blank return statements will return true, implying to drop the request
+	drop = true
+
     switch envelope.Event {
 
     case "get_ping":
@@ -122,12 +125,33 @@ func handleInternalRequest(envelope *WSEnvelope) bool {
         envelope.Event = "ping_response"
         envelope.Payload, _ = json.Marshal(pingData)
 
-    case "drop":
-        // Drops the websocket request, effectively doing nothing
-        return true 
-    }
+		// Explicitly allow this request to reroute back to the requester
+		return false
 
-	return false // Pass the payload along to reroute normally
+	case "send_server_packet":
+		// Handle incoming server packets requests, using envelope.Target for the player name instead of the 
+		session, packetName, packetData, err := extractPacketRequest(envelope)
+		if err != nil {
+			log.Printf("Server packet extraction failed: %v", err)
+			return
+		}
+		if err := WriteServerJSONPacket(session.ServerConn, packetName, packetData); err != nil {
+			log.Printf("Server injection failed for %s: %v", envelope.Target, err)
+		}
+
+	case "send_client_packet":
+		// Handle incoming client packets requests, using envelope.Target for the player name instead of the 
+		session, packetName, packetData, err := extractPacketRequest(envelope)
+		if err != nil {
+			log.Printf("Client packet extraction failed: %v", err)
+			return
+		}
+		if err := WriteClientJSONPacket(session.ClientConn, packetName, packetData); err != nil {
+			log.Printf("Client injection failed for %s: %v", envelope.Target, err)
+		}
+    }
+	// This is not an internal event, so it should not be dropped and should be rerouted
+	return false 
 }
 
 func SendWebSocketEvent(envelope *WSEnvelope) error {
