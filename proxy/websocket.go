@@ -15,9 +15,15 @@ import (
 // This serves as our middle man to handle multiple concurrent websocket connextions for our applications
 // Any one client can request from another connected app, rather than being limited to point to point
 // This avoids a P2P mesh where every app needs to make its own WS connection to each other app (N^2)
+
+type WebsocketClient struct {
+	conn *websocket.Conn
+	mu 	 sync.Mutex
+}
+
 var (
 	// Track WebSocket connections and mutex for safe concurrent access
-    wsConns = make(map[string]*websocket.Conn)
+    wsConns = make(map[string]*WebsocketClient)
     wsMu sync.Mutex
 
 	// Track the state of outbound websocket requests to clients
@@ -38,6 +44,19 @@ type WSEnvelope struct {
 	ID        string          `json:"id,omitempty"` 		// ID of the request, used for callbacks if needed
 	Timestamp int64           `json:"timestamp"` 			// Unix timestamp tracking when the event was received
 	Payload   json.RawMessage `json:"payload"`   			// Keeps data raw/unparsed until it reaches its destination
+}
+
+// Helper functions to assure non concurrent websocket writes at the same time
+func (wsClient *WebsocketClient) WriteRaw(messageType int, data []byte) error {
+	wsClient.mu.Lock()
+	defer wsClient.mu.Unlock()
+	return wsClient.conn.WriteMessage(messageType, data)
+}
+
+func (wsClient *WebsocketClient) WriteJSON(v interface{}) error {
+	wsClient.mu.Lock()
+	defer wsClient.mu.Unlock()
+	return wsClient.conn.WriteJSON(v)
 }
 
 func listenToClient(clientType string, conn *websocket.Conn) {
@@ -101,7 +120,7 @@ func listenToClient(clientType string, conn *websocket.Conn) {
                 log.Println("Error marshaling routing envelope context:", err)
                 continue
             }
-			if err := targetConn.WriteMessage(websocket.TextMessage, fullMessage); err != nil {
+			if err := targetConn.WriteRaw(websocket.TextMessage, fullMessage); err != nil {
 				log.Printf("Failed to forward packet to target '%s': %v", envelope.Target, err)
 			}
 		}
@@ -110,48 +129,51 @@ func listenToClient(clientType string, conn *websocket.Conn) {
 
 // handleInternalRequest checks if an incoming message is meant for the proxy itself.
 // Returns true to drop/ignore the packet, or false if it should be rerouted.
-func handleInternalRequest(envelope *WSEnvelope) (drop bool) {
-	// Any blank return statements will return true, implying to drop the request
-	drop = true
-
+func handleInternalRequest(envelope *WSEnvelope) bool {
     switch envelope.Event {
 
     case "get_ping":
-		// Update the payload and reroute it to the current target
+		// Update the ping payload and reroute it to the requesting target
+		pingSnapshot := make(map[string]int64)
         playerpingMu.RLock()
-        pingData := playerPing
+		for username, ping := range playerPing {
+			pingSnapshot[username] = ping
+		}
         playerpingMu.RUnlock()
 
         envelope.Event = "ping_response"
-        envelope.Payload, _ = json.Marshal(pingData)
+        envelope.Payload, _ = json.Marshal(pingSnapshot)
 
 		// Explicitly allow this request to reroute back to the requester
 		return false
 
 	case "send_server_packet":
-		// Handle incoming server packets requests, using envelope.Target for the player name instead of the 
 		session, packetName, packetData, err := extractPacketRequest(envelope)
 		if err != nil {
 			log.Printf("Server packet extraction failed: %v", err)
-			return
+			return true
 		}
+		// Handle incoming server packets requests, using envelope.Target for the player name instead
 		if err := WriteServerJSONPacket(session.ServerConn, packetName, packetData); err != nil {
 			log.Printf("Server injection failed for %s: %v", envelope.Target, err)
 		}
+		return true
 
 	case "send_client_packet":
-		// Handle incoming client packets requests, using envelope.Target for the player name instead of the 
 		session, packetName, packetData, err := extractPacketRequest(envelope)
 		if err != nil {
 			log.Printf("Client packet extraction failed: %v", err)
-			return
+			return true
 		}
+		// Handle incoming client packets requests, using envelope.Target for the player name instead
 		if err := WriteClientJSONPacket(session.ClientConn, packetName, packetData); err != nil {
 			log.Printf("Client injection failed for %s: %v", envelope.Target, err)
 		}
+		return true
     }
+
 	// This is not an internal event, so it should not be dropped and should be rerouted
-	return false 
+	return false
 }
 
 func SendWebSocketEvent(envelope *WSEnvelope) error {

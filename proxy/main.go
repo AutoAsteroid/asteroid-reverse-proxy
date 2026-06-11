@@ -111,7 +111,7 @@ func main() {
 		// Register this WebSocket connection into our central registry for other clients
 		log.Printf("Successfully registered websocket: \"%s\"", clientType)
 		wsMu.Lock()
-		wsConns[clientType] = conn
+		wsConns[clientType] = &WebsocketClient{conn: conn}
 		wsMu.Unlock()
 
 		// Listen to this WebSocket for incoming messages in a separate goroutine
