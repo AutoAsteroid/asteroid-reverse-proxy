@@ -5,7 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
+	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
@@ -17,35 +17,28 @@ import (
 
 // DecodeSkinRGBA converts a raw Bedrock base64 skin string into a standard Go *image.RGBA object
 // Minecraft textures are passed as raw uncompressed byte arrays (RGBA) wrapped in base64
-func DecodeSkinRGBA(skinBase64 string) (*image.RGBA, error) {
+func DecodeSkinRGBA(skinBase64 string, width int, height int) (*image.RGBA, error) {
 	// Decode the base64 string into raw binary RGBA pixels
 	raw, err := base64.StdEncoding.DecodeString(skinBase64)
 	if err != nil {
 		return nil, err
 	}
 
-	// Determine texture dimensions based on byte array length (Width * Height * 4 bytes per pixel)
-	var w, h int
-	switch len(raw) {
-	case 64 * 32 * 4: 		// Legacy Steve/Alex format
-		w, h = 64, 32
-	case 64 * 64 * 4: 		// Modern standard format
-		w, h = 64, 64
-	case 128 * 128 * 4: 	// High definition marketplace or imported skins
-		w, h = 128, 128
-	default:
-		return nil, errors.New("unknown skin size: expected 64x32, 64x64, or 128x128 pixels")
+	// Validate that this is a valid player skin with its expected size
+	expectedBytes := width * height * 4
+	if len(raw) < expectedBytes {
+		return nil, fmt.Errorf("insufficient skin data: %d < %d bytes", expectedBytes, len(raw))
 	}
 
 	// Create an empty image canvas and copy the raw pixel bytes into it
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	copy(img.Pix, raw)
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	img.Pix = raw[:expectedBytes]
 	return img, nil
 }
 
 // Converts a raw decoded base64 skin matrix directly into standard compressed PNG file bytes
-func SkinDataToPNG(skinBase64 string) ([]byte, error) {
-	img, err := DecodeSkinRGBA(skinBase64)
+func SkinDataToPNG(skinBase64 string, width int, height int) ([]byte, error) {
+	img, err := DecodeSkinRGBA(skinBase64, width, height)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +78,8 @@ func ExtractFacePNG(skin *image.RGBA) ([]byte, error) {
 }
 
 // Saves a base64 skin to disk as both a full skin and its cropped face PNG to "skins"
-func SaveSkin(skinBase64 string, folderName string) error {
-	skinRGBA, err := DecodeSkinRGBA(skinBase64)
+func SaveSkin(skinBase64 string, width int, height int, folderName string) error {
+	skinRGBA, err := DecodeSkinRGBA(skinBase64, width, height)
 	if err != nil {
 		return err
 	}

@@ -127,31 +127,35 @@ var ignoreList = []string{
 	"SetScore",
 	"SetTitle",
 	"PlayerAuthInput",
-	"InventoryContent",
-	"InventoryTransaction",
 	"CurrentStructureFeature",
 	"SetTime",
 	"SubChunkRequest",
 	"LevelChunk",
 	"SubChunk",
+	"MoveActorDelta",
+	"MovePlayer",
+}
+
+func LogMinecraftPacketBytes(pk []byte, header string) {
+	
 }
 
 // Takes a minecraft packet, resolves its name, and dumps into JSON unless ignored
 func LogMinecraftPacket(pk packet.Packet, header string) {
 	// Use reflection to get the readable name of the struct type
-	packet := reflect.TypeOf(pk).Elem().Name()
+	packetName := reflect.TypeOf(pk).Elem().Name()
 
 	// Ignore logging certain packets passed into pk that may flood console
 	for _, name := range ignoreList {
-		if name == packet {
+		if name == packetName {
 			return
 		}
 	}
 
 	// Figure out and distinguish if this is a client or server packet
 	direction := "Unknown"
-	_, isClient := clientStringToID[packet]
-	_, isServer := serverStringToID[packet]
+	_, isClient := clientStringToID[packetName]
+	_, isServer := serverStringToID[packetName]
 
 	switch {
 	case isClient && isServer:
@@ -165,8 +169,8 @@ func LogMinecraftPacket(pk packet.Packet, header string) {
 	// Marshal the struct into a readable indented JSON string and print it
 	jsonData, err := json.MarshalIndent(pk, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal %s to JSON: %v", packet, err)
+		log.Printf("Failed to marshal %s to JSON: %v", packetName, err)
 		return
 	}
-	log.Printf("%s -> %s (ID: %d, Type: %s):\n%s", packet, header, pk.ID(), direction, string(jsonData))
+	log.Printf("%s -> %s (ID: %d, Type: %s):\n%s", packetName, header, pk.ID(), direction, string(jsonData))
 }

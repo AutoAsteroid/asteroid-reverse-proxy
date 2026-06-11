@@ -27,10 +27,10 @@ var (
 )
 
 func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) {
-	// SelfSignedID is inconsistent if the same account joins on different devices, so we use a stable UUID instead (xuid causes errors)
 	identityData := clientConn.IdentityData()
 	clientData := clientConn.ClientData()
 
+	// SelfSignedID is inconsistent if the same account joins on different devices, so we use a stable UUID instead
 	clientData.SelfSignedID = identityData.Identity
 	username := identityData.DisplayName
 	xuid := identityData.XUID
@@ -39,7 +39,7 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 	log.Printf("Connection: %s (%s) [%s]", username, xuid, ip_address)
 	
 	// Save the player's skin to disk, used for serving images for the chat relay
-	if err := SaveSkin(clientData.SkinData, username); err != nil {
+	if err := SaveSkin(clientData.SkinData, clientData.SkinImageWidth, clientData.SkinImageHeight, username); err != nil {
 		log.Println("Failed to save skin to disk:", err)
 	}
 
@@ -70,37 +70,23 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 		return
 	}
 
-	// Establish unified tracking cleanup function to handle player teardowns
+	// Cleanup and termination logic to clear variables once the player disconnects from the server
+	disconnectChan := make(chan struct{})
+
 	var closeOnce sync.Once
-	closeConnection := func() {
+	closeConnection := func(reason string) {
 		closeOnce.Do(func() {
 			log.Printf("Disconnect: %s (%s) [%s]", username, xuid, ip_address)
+			close(disconnectChan)
 
 			playerSessionsMu.Lock()
 			delete(playerSessions, username)
 			playerSessionsMu.Unlock()
 
-			_ = listener.Disconnect(clientConn, "Disconnected from server.")
+			_ = listener.Disconnect(clientConn, reason)
 			_ = serverConn.Close()
 		})
 	};
-	
-	// Ensure the connection is established and the player has spawned in before starting to forward packets
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		if err := clientConn.StartGame(serverConn.GameData()); err != nil {
-			log.Println("StartGame sync runtime error:", err)
-		}
-		wg.Done()
-	}()
-	go func() {
-		if err := serverConn.DoSpawn(); err != nil {
-			log.Println("DoSpawn sync runtime error:", err)
-		}
-		wg.Done()
-	}()
-	wg.Wait()
 
 	// Register pointers to both the client connection and player connection
 	playerSessionsMu.Lock()
@@ -110,38 +96,65 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 		JoinDate:	time.Now(),
 	}
 	playerSessionsMu.Unlock()
+	
+	// Ensure the connection is established and the player has spawned in before starting to write packets
+	if err := clientConn.StartGame(serverConn.GameData()); err != nil {
+		log.Println("StartGame sync runtime error:", err)
+		closeConnection("Failed to initialize game client.")
+		return
+	}
+
+	// Once the client container is built and ready, safely trigger the server spawn sequence
+	if err := serverConn.DoSpawn(); err != nil {
+		log.Println("DoSpawn sync runtime error:", err)
+		closeConnection("Server failed to spawn player.")
+		return
+	}
 
 	// Client connection read loop to forward packets from the client to the backend server
 	go func() {
-		defer closeConnection()
+		defer closeConnection("Client to server connection disconncted.")
 		for {
-			pk, err := clientConn.ReadPacket()
+			pkBytes, err := clientConn.ReadBytes()
 			if err != nil {
 				return
 			}
-			if err := serverConn.WritePacket(pk); err != nil {
+			if _, err = serverConn.Write(pkBytes); err != nil {
 				return
 			}
-			// LogMinecraftPacket(pk, "Server")
 		}
 	}()
+
 	// Server connection read loop to forward packets from the backend server to the client
 	go func() {
-		defer closeConnection()
+		defer closeConnection("Server to client connection disconnected.")
 		for {
-			pk, err := serverConn.ReadPacket()
+			pkBytes, err := serverConn.ReadBytes()
 			if err != nil {
 				return
 			}
-			if err := clientConn.WritePacket(pk); err != nil {
+			if _, err = clientConn.Write(pkBytes); err != nil {
 				return
 			}
-			// LogMinecraftPacket(pk, "Client")
-		
-			// Update this players ping that can be requested in a websocket call
-			playerpingMu.Lock()
-			playerPing[username] = clientConn.Latency().Milliseconds() * 2
-			playerpingMu.Unlock()
+		}
+	}()
+
+	// Update this player's ping every second that can be requested in a websocket call
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				currentPing := clientConn.Latency().Milliseconds() * 2
+				playerpingMu.Lock()
+				playerPing[username] = currentPing
+				playerpingMu.Unlock()
+
+			case <-disconnectChan:
+				return
+			}
 		}
 	}()
 }
