@@ -1,5 +1,6 @@
 {
     "APPLICATION_ID": "",
     "GUILD_ID": "",
-    "RELAY_CHANNEL_ID": ""
+    "RELAY_CHANNEL_ID": "",
+    "STAFF_ROLE_ID": ""
 }

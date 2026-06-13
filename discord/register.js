@@ -17,7 +17,13 @@ const COMMANDS = [
             .setRequired(true)),
     new SlashCommandBuilder()
         .setName('players')
-        .setDescription('Displays the players currently online.')
+        .setDescription('Displays the players currently online.'),
+    new SlashCommandBuilder()
+        .setName('alts')
+        .setDescription('Gets all the linked alt accounts of a player.')
+        .addStringOption(option => option.setName('username')
+            .setDescription('The username to check.')
+            .setRequired(true)),
 ].map((command) => command.toJSON());
 
 // Register the discord slash commands to your bot for you private discord server

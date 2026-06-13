@@ -1,5 +1,7 @@
 
+const { MessageFlags, EmbedBuilder } = require("discord.js");
 const { exec } = require("child_process");
+const { requestWS } = require("./websocket");
 
 /**
  * Sends a command directly into the server console by using a screen session
@@ -20,7 +22,6 @@ async function buildPlayerList() {
     // get_players in example.js does not fulfill my actual implementation of it
     const players = await requestWS("get_players", "script_api");
     const playersArray = Object.entries(players);
-
     
     // Build as many embeds as needed, as discord limits to 30 fields per embed
     const embeds = [];
