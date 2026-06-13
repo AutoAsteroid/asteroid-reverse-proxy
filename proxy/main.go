@@ -154,6 +154,7 @@ func main() {
 	log.Printf("Remote Target Routed To: %s", config.RemoteAddr)
 
 	// Main connection acceptance loop for incoming Minecraft client connections to the proxy
+	go StartPingUpdater()
 	for {
 		connection, err := listener.Accept()
 		if err != nil {

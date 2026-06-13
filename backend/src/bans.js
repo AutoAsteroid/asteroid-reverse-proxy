@@ -1,5 +1,5 @@
 
-const { db, saveDB } = require("./database");
+const { db, saveDB, alternates } = require("./database");
 const { formatDuration } = require("./utils");
 
 /**
@@ -12,7 +12,7 @@ function processLogin({ xuid, address, deviceId, vpn, titleId, maxViewDistance }
         return { allowed: true, reason: "Operator" };
 
     // titleId is missing from legitimate connections in offline mode. Bots seem to still have it
-    if (titleId === "" || maxViewDistance === 0)
+    if (titleId !== "" || maxViewDistance === 0)
         return { allowed: false, reason: "Unauthorized" };
     if (vpn === true) 
         return { allowed: false, reason: "VPN or proxies are not allowed." };
@@ -37,13 +37,20 @@ function processLogin({ xuid, address, deviceId, vpn, titleId, maxViewDistance }
         delete db.blacklist[xuid];
         saveDB("blacklist", db.blacklist);
     }
+
+    // Update our in memory alternate account tracking disjoint set
+    alternates.union(xuid, deviceId);
+    alternates.union(xuid, address);
+
     // Cross reference all other banned players for profile "fingerprinting"
     const bannedXUIDs = Object.keys(db.blacklist);
+    const idCluster = alternates.getCluster(deviceId);
+    const ipCluster = alternates.getCluster(address);
 
     // Check if this player's address or device match any other banned profiles
-    if (bannedXUIDs.some(xuid => db.profiles[xuid]?.deviceIDs?.includes(deviceId)))
+    if (bannedXUIDs.some(bannedXUID => idCluster.includes(bannedXUID)))
         return { allowed: false, reason: "You are hardware banned." };
-    if (bannedXUIDs.some(xuid => db.profiles[xuid]?.addresses?.includes(address)))
+    if (bannedXUIDs.some(bannedXUID => ipCluster.includes(bannedXUID)))
         return { allowed: false, reason: "You are IP banned." };
     
     // Player should be allowed to join after preprocessing

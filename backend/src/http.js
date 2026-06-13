@@ -82,7 +82,7 @@ registerHttpUrl("/readJSON", (request, response, { file }) => {
 // Write into to a JSON file provided the parameters given by the HTTP request
 registerHttpUrl("/writeJSON", (request, response, { file, json }) => {
     // Assure the HTTP request has the correct fields entered in request
-    if (!path || typeof path !== "string") {
+    if (!file || typeof file !== "string") {
         response.writeHead(400, { "Content-Type": "text/plain" });
         return response.end("A valid file name must be provided.\n");
     }

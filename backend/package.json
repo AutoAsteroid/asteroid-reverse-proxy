@@ -4,6 +4,7 @@
     "description": "Backend for Asteroid PvP.",
     "main": "src/http.js",
     "scripts": {
+        "start": "node --no-warnings src/http.js",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [],

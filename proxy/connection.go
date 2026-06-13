@@ -71,13 +71,10 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 	}
 
 	// Cleanup and termination logic to clear variables once the player disconnects from the server
-	disconnectChan := make(chan struct{})
-
 	var closeOnce sync.Once
 	closeConnection := func(reason string) {
 		closeOnce.Do(func() {
 			log.Printf("Disconnect: %s (%s) [%s]", username, xuid, ip_address)
-			close(disconnectChan)
 
 			playerSessionsMu.Lock()
 			delete(playerSessions, username)
@@ -138,23 +135,23 @@ func handleConnection(clientConn *minecraft.Conn, listener *minecraft.Listener) 
 			}
 		}
 	}()
+}
 
-	// Update this player's ping every second that can be requested in a websocket call
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
+// Update everyone's ping in a single go routine rather than once per connection
+func StartPingUpdater() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				currentPing := clientConn.Latency().Milliseconds() * 2
-				playerpingMu.Lock()
-				playerPing[username] = currentPing
-				playerpingMu.Unlock()
+	for range ticker.C {
+		playerSessionsMu.RLock()
 
-			case <-disconnectChan:
-				return
-			}
+		for username, session := range playerSessions {
+			currentPing := session.ClientConn.Latency().Milliseconds() * 2
+			
+			playerpingMu.Lock()
+			playerPing[username] = currentPing
+			playerpingMu.Unlock()
 		}
-	}()
+		playerSessionsMu.RUnlock()
+	}
 }

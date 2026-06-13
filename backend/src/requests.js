@@ -1,12 +1,12 @@
 
-const { db, saveDB } = require("./database");
+const { db, saveDB, alternates } = require("./database");
 const { registerWsRequest, sendWS } = require("./websocket");
 const { processLogin, blacklist, unblacklist } = require("./bans");
 const { runConsole, isVPN, messageServer, syncIcon } = require("./utils");
 
 /**
  * Process and save a player's login packet and cache their info into profiles.json
- * @param {Object} payload LoginInfo struct sent from websocket from the proxy
+ * Also returns to the proxy if this connection should be authorized to join the game
  */
 registerWsRequest("login", async (envelope) => {
     const { xuid, address, displayName, deviceId } = envelope.payload;
@@ -99,5 +99,21 @@ registerWsRequest("unblacklist", (envelope) => {
     const { name, issuer, reason } = envelope.payload;
     envelope.event = "unblacklist_response";
     envelope.payload = unblacklist(name, issuer, reason);
+    sendWS(envelope);
+});
+
+/**
+ * Return an array of all usernames linked to any given username
+ * Accounts are considered linked if they share an IP or device
+ */
+registerWsRequest("alternates", (envelope) => {
+    const xuid = db.xuids[envelope.payload];
+    const links = alternates.getCluster(xuid);
+    const usernames = links
+        .map(id => db.profiles[id]?.displayName)
+        .filter(Boolean);
+
+    envelope.event = "alternates_response";
+    envelope.payload = usernames;
     sendWS(envelope);
 });
