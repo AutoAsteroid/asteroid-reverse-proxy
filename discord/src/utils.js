@@ -14,6 +14,26 @@ function runConsole(command, screen) {
 }
 
 /**
+ * Convert milliseconds to a formatted duration string in d, h, m, s
+ * @param {number} milliseconds Time in milliseconds to convert
+ * @returns {string} The formatted time like: 12d 23h 45m 0s
+ */
+function formatDuration(milliseconds) {
+    // Handle infinity and NaN to default to "Forever"
+    if (Number.isFinite(milliseconds) === false) return "Forever";
+
+    // Calculate the total days, hours, minutes, and seconds
+    const totalSeconds = Math.ceil(Math.max(milliseconds, 0) / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    // Return the formatted millisecond duration
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+/**
  * Returns a list of formatted embeds of all the players online the server
  * Each embed has a max of 24 fields, or 24 players shown in each embed
  * Discord has a max of 10 embeds per message, and 30 fields per embed
@@ -52,4 +72,4 @@ async function buildPlayerList() {
     return { embeds: embeds };
 }
 
-module.exports = { runConsole, buildPlayerList };
+module.exports = { runConsole, buildPlayerList, formatDuration };

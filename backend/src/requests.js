@@ -107,7 +107,12 @@ registerWsRequest("unblacklist", (envelope) => {
  * Accounts are considered linked if they share an IP or device
  */
 registerWsRequest("alternates", (envelope) => {
-    const xuid = db.xuids[envelope.payload];
+    // Normalize the username so input is case insensitive
+    const lowercase = envelope.payload.toLowerCase();
+    const username = Object.keys(db.xuids).find(
+        key => key.toLowerCase() === lowercase);
+
+    const xuid = db.xuids[username];
     const links = alternates.getCluster(xuid);
     const usernames = links
         .map(id => db.profiles[id]?.displayName)

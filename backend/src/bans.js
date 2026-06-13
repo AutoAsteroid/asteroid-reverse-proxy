@@ -1,6 +1,6 @@
 
 const { db, saveDB, alternates } = require("./database");
-const { formatDuration } = require("./utils");
+const { formatDuration, sendDiscordWebhook } = require("./utils");
 
 /**
  * Further preprocessing to check if a player is banned or allowed to join the server
@@ -72,15 +72,39 @@ function blacklist(name, issuer, reason, duration = null) {
     // Construct the blacklist object and save it into database/blacklist.json
     const date = new Date().toLocaleString("en-US");
     const unbanDate = duration === null ? null : Date.now() + duration;
-
     db.blacklist[xuid] = { name, issuer, reason, duration: unbanDate, date };
+
+    // Log the ban to the discord webhook provided in .env for responsiveness
+    const discordEmbed = {
+        description: [
+            `## Banned: __${name}__`,
+            `**Reason:** ${reason || "No reason provided."}`,
+            `**Issuer:** ${issuer || "Server"}`,
+            `**Duration:** ${formatDuration(duration)}`,
+        ].join("\n"),
+        thumbnail: { url: db.profiles[xuid].icon }
+    }
+    sendDiscordWebhook(discordEmbed, process.env.LOG_CHANNEL, "c");
+
+    // Should ALWAYS return truthy unless the blacklist failed to save to disk
     return saveDB("blacklist", db.blacklist);
 }
 
 function unblacklist(name, issuer, reason) {
-    if (db.xuids[name] in db.blacklist === false) return false;
+    const xuid = db.xuids[name];
+    if (xuid in db.blacklist === false) return false;
+    else delete db.blacklist[db.xuids[name]];
 
-    delete db.blacklist[db.xuids[name]];
+    // Log the ban to the discord webhook provided in .env for responsiveness
+    const discordEmbed = {
+        description: [
+            `## Unbanned: __${name}__`,
+            `**Reason:** ${reason || "No reason provided."}`,
+            `**Issuer:** ${issuer || "Server"}`,
+        ].join("\n"),
+        thumbnail: { url: db.profiles[xuid].icon }
+    }
+    sendDiscordWebhook(discordEmbed, process.env.LOG_CHANNEL, "a");
     return saveDB("blacklist", db.blacklist);
 }
 

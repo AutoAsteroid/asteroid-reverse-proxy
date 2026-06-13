@@ -24,6 +24,24 @@ const COMMANDS = [
         .addStringOption(option => option.setName('username')
             .setDescription('The username to check.')
             .setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('ban')
+        .setDescription('Blacklist a player from joining the server.')
+        .addStringOption(option => option.setName('username')
+            .setDescription('The username to blacklist.')
+            .setRequired(true))
+        .addStringOption(option => option.setName('duration')
+            .setDescription('The duration this ban should last.'))
+        .addStringOption(option => option.setName('reason')
+            .setDescription('The reason for issuing this ban.')),
+    new SlashCommandBuilder()
+        .setName('unban')
+        .setDescription('Removes a player from the blacklist.')
+        .addStringOption(option => option.setName('username')
+            .setDescription('The username to unban.')
+            .setRequired(true))
+        .addStringOption(option => option.setName('reason')
+            .setDescription('The reason for issuing this unban.')),
 ].map((command) => command.toJSON());
 
 // Register the discord slash commands to your bot for you private discord server

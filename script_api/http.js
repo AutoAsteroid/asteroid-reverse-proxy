@@ -60,7 +60,7 @@ export async function writeJSONFile(file, json) {
         new HttpHeader("Content-Type", "application/json"),
         new HttpHeader("auth", AUTH_TOKEN) ];
 
-    return await http.request(request)
+    return http.request(request)
         .then(() => true)
         .catch(() => false);
 }

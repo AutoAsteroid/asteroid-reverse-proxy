@@ -4,14 +4,14 @@ const path = require("path");
 const { exec } = require("child_process");
 const { db, saveDB } = require("./database");
 const { sendWS } = require("./websocket");
+const { DISCORD_COLORS } = require("../lib/constants");
 
 /**
  * Sends a message and sound ingame to to all players on the minecraft server 
- * @param {string} message The message to send
- * @param {string} sound The minecraft sound id to play
+ * @param {string} message The message to send in game with world.sendMessage()
  */
-function messageServer(message, sound) {
-    sendWS({ event: "message", target: "script_api", payload: { message, sound } });
+function messageServer(message) {
+    sendWS({ event: "message", target: "script_api", payload: message });
 }
 
 /**
@@ -94,7 +94,7 @@ async function syncIcon(username) {
     formData.append("files[0]", new Blob([imageBuffer]), username + ".png");
 
     // Send the discord webhook and try to extract the generated CDN link
-    const url = process.env.WEBHOOK_URL + "?wait=true";
+    const url = process.env.SKIN_CHANNEL + "?wait=true";
     const response = await fetch(url, { method: "POST", body: formData });
     if (!response.ok) return null;
 
@@ -102,4 +102,32 @@ async function syncIcon(username) {
     return result.embeds[0].image.url;
 }
 
-module.exports = { messageServer, isVPN, runConsole, formatDuration, syncIcon };
+/**
+ * Normalized discord embed builder for sending standard messages to webhooks
+ * @param {string} embed The raw embed data to send to discord
+ * @param {string} webhook The link to the discord webhook to send this to
+ * @param {string} color The Minecraft color code to send the embed with
+ */
+async function sendDiscordWebhook(embed, webhook, color) {
+    // Normalized embed information (color can be any actual color code too)
+    embed.color = DISCORD_COLORS[color] ?? color;
+    embed.timestamp = new Date().toISOString();
+    embed.footer ??= { text: "Asteroid PvP" };
+
+    return fetch(webhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: [ embed ] })
+    })
+    .then(() => true)
+    .catch(() => false);
+}
+
+module.exports = { 
+    messageServer, 
+    isVPN, 
+    runConsole, 
+    formatDuration, 
+    syncIcon, 
+    sendDiscordWebhook 
+};

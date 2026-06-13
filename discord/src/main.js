@@ -42,25 +42,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply("This command only works in a server.");
 
     const executeCommand = commands.get(interaction.commandName);
-    const requiredPermission = commands.get(interaction.commandName);
+    const requiredPermissions = permissions.get(interaction.commandName) ?? [];
     if (!executeCommand) return;
 
-    // Authorize that this person has the required permissions to run this
-    const isAdmin = interaction.memberPermissions?.has("Administrator") ?? false;
-    const isStaff = interaction.member?.roles.cache.has(STAFF_ROLE_ID) ?? false;
+    // Authorize that this person has the required permissions to run this command
+    const isAdmin = interaction.memberPermissions?.has("Administrator");
+    const hasPermission = isAdmin || requiredPermissions.every((permission) => {
+        if (permission === "Staff")
+            return interaction.member?.roles.cache.has(STAFF_ROLE_ID);
+        else return interaction.memberPermissions?.has(permission);
+    });
+    if (!hasPermission) return interaction.reply({
+        content: "You have insuficient permissions to run this command.",
+        flags: MessageFlags.Ephemeral
+    });
 
-    if (requiredPermission === "admin" && !isAdmin) {
-        return interaction.reply({
-            content: "Only administrators can run this command.",
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    if (requiredPermission === "staff" && !isAdmin && !isStaff) {
-        return interaction.reply({
-            content: "Only staff members can run this command.",
-            flags: MessageFlags.Ephemeral
-        });
-    }
     // Execute the interaction if permissions are authorized
     try {
         await executeCommand(interaction);
@@ -72,7 +68,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Chat relay between discord to minecraft server listener
 client.on(Events.MessageCreate, relay);
 
-// Login in to the bot using our environment variable token!
+// Login to the bot using our environment variable token!
 client.login(process.env.DISCORD_TOKEN);
 
 module.exports = client;
