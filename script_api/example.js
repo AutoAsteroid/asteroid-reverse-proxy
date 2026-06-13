@@ -1,5 +1,6 @@
 
 import { world, system } from "@minecraft/server";
+import { kickPlayer } from "@minecraft/server-admin";
 import { registerWsRequest, sendWS, requestWS } from "./websocket";
 import { readJSONFile, writeJSONFile } from "./http";
 
@@ -19,6 +20,12 @@ registerWsRequest("get_players", (envelope) => {
 
 registerWsRequest("message", (envelope) => {
     world.sendMessage(envelope.payload);
+});
+
+registerWsRequest("kick", (envelope) => {
+    const { name, reason } = envelope.payload;
+    const [ player ] = world.getPlayers({ name });
+    if (player) kickPlayer(player, reason);
 });
 
 /**

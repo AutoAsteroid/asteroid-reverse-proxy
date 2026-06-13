@@ -1,6 +1,7 @@
 
 const { db, saveDB, alternates } = require("./database");
 const { formatDuration, sendDiscordWebhook } = require("./utils");
+const { sendWS } = require("./websocket");
 
 /**
  * Further preprocessing to check if a player is banned or allowed to join the server
@@ -85,6 +86,7 @@ function blacklist(name, issuer, reason, duration = null) {
         thumbnail: { url: db.profiles[xuid].icon }
     }
     sendDiscordWebhook(discordEmbed, process.env.LOG_CHANNEL, "c");
+    sendWS({ event: "kick", target: "script_api", payload: { name, reason } });
 
     // Should ALWAYS return truthy unless the blacklist failed to save to disk
     return saveDB("blacklist", db.blacklist);
