@@ -1,5 +1,4 @@
 
-
 /**
  * This is a mapping from Minecraft bedrock text colors to their respective colors for discord
  * Used to color discord embeds! This is equivalent to using §# in Minecraft for colors

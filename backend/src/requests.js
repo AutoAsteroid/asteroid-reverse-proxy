@@ -1,8 +1,8 @@
 
-const { db, saveDB, alternates } = require("./database");
+const { db, saveDB } = require("./database");
 const { registerWsRequest, sendWS } = require("./websocket");
 const { processLogin, blacklist, unblacklist } = require("./bans");
-const { runConsole, isVPN, messageServer, syncIcon } = require("./utils");
+const { runConsole, isVPN, messageServer, syncIcon, xuidFromUsername } = require("./utils");
 
 /**
  * Process and save a player's login packet and cache their info into profiles.json
@@ -69,8 +69,6 @@ registerWsRequest("get_ban", (envelope) => {
  */
 registerWsRequest("get_db_key", (envelope) => {
     const { file, key } = envelope.payload;
-    console.log(file, key)
-
     db[file] ??= {};
     envelope.event = "get_db_key_response";
     envelope.payload = db[file][key];
@@ -107,18 +105,26 @@ registerWsRequest("unblacklist", (envelope) => {
  * Accounts are considered linked if they share an IP or device
  */
 registerWsRequest("alternates", (envelope) => {
-    // Normalize the username so input is case insensitive
-    const lowercase = envelope.payload.toLowerCase();
-    const username = Object.keys(db.xuids).find(
-        key => key.toLowerCase() === lowercase);
+    const alternates = require("../lib/alts");
+    const xuid = xuidFromUsername(envelope.payload);
+    const links = alternates.dsu.getCluster(xuid);
 
-    const xuid = db.xuids[username];
-    const links = alternates.getCluster(xuid);
+    // Filter only the usernames that exist in the cluster
     const usernames = links
         .map(id => db.profiles[id]?.displayName)
         .filter(Boolean);
 
     envelope.event = "alternates_response";
     envelope.payload = usernames;
+    sendWS(envelope);
+});
+
+registerWsRequest("trace_alts", (envelope) => {
+    const alternates = require("../lib/alts");
+    const xuid = xuidFromUsername(envelope.payload);
+
+    // Responds with a tree structure of the trace
+    envelope.event = "trace_response";
+    envelope.payload = alternates.trace(xuid);
     sendWS(envelope);
 });

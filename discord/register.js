@@ -23,7 +23,10 @@ const COMMANDS = [
         .setDescription('Gets all the linked alt accounts of a player.')
         .addStringOption(option => option.setName('username')
             .setDescription('The username to check.')
-            .setRequired(true)),
+            .setRequired(true))
+        .addBooleanOption(option => option.setName('trace')
+            .setDescription('Prints the responding connecion tree if true.')
+            .setRequired(false)),
     new SlashCommandBuilder()
         .setName('ban')
         .setDescription('Blacklist a player from joining the server.')

@@ -1,7 +1,8 @@
 
-const { db, saveDB, alternates } = require("./database");
+const { db, saveDB } = require("./database");
 const { formatDuration, sendDiscordWebhook } = require("./utils");
 const { sendWS } = require("./websocket");
+const alternates = require("../lib/alts");
 
 /**
  * Further preprocessing to check if a player is banned or allowed to join the server
@@ -40,13 +41,13 @@ function processLogin({ xuid, address, deviceId, vpn, titleId, maxViewDistance }
     }
 
     // Update our in memory alternate account tracking disjoint set
-    alternates.union(xuid, deviceId);
-    alternates.union(xuid, address);
+    alternates.track(xuid, "xuid", deviceId, "device");
+    alternates.track(xuid, "xuid", address, "ip");
 
     // Cross reference all other banned players for profile "fingerprinting"
     const bannedXUIDs = Object.keys(db.blacklist);
-    const idCluster = alternates.getCluster(deviceId);
-    const ipCluster = alternates.getCluster(address);
+    const idCluster = alternates.dsu.getCluster(deviceId);
+    const ipCluster = alternates.dsu.getCluster(address);
 
     // Check if this player's address or device match any other banned profiles
     if (bannedXUIDs.some(bannedXUID => idCluster.includes(bannedXUID)))

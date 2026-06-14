@@ -1,9 +1,11 @@
 
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
-const { db, saveDB } = require("./database");
-const { sendWS } = require("./websocket");
+
+const { db, saveDB, parseJSON } = require("./database");
+const { sendWS, requestWS, registerWsRequest } = require("./websocket");
 const { DISCORD_COLORS } = require("../lib/constants");
 
 /**
@@ -123,11 +125,42 @@ async function sendDiscordWebhook(embed, webhook, color) {
     .catch(() => false);
 }
 
+/**
+ * Resolves a case insensitive username to its valid profile XUID
+ * @param {string} name Case insensitive username to match to
+ * @returns {string|null} The matching XUID, or null if not found
+ */
+function xuidFromUsername(name) {
+    const lowercase = name.toLowerCase();
+    const username = Object.keys(db.xuids).find(
+        key => key.toLowerCase() === lowercase
+    );
+    return username ? db.xuids[username] : null;
+}
+
+/**
+ * Anonymize a value with salt to hide sensitive values consistently
+ * @param {string} value The value we will be hashing in sha256
+ * @param {string} prefix Prefix for the value without hashing it
+ * @param {number} length Length to partition from the created hash
+ * @returns {string} Consistent anonymous string value
+ */
+function anonymize(value, prefix, length) {
+    const secret = value + process.env.ANONYMIZE_SALT;
+    const hash = crypto
+        .createHash("sha256")
+        .update(secret).digest("hex");
+
+    return `${prefix}:${hash.substring(0, length)}`;
+}
+
 module.exports = { 
     messageServer, 
     isVPN, 
     runConsole, 
     formatDuration, 
     syncIcon, 
-    sendDiscordWebhook 
+    sendDiscordWebhook,
+    xuidFromUsername,
+    anonymize
 };

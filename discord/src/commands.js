@@ -43,10 +43,29 @@ permissions.set("console", [ "Administrator" ]);
  */
 commands.set("alts", async (interaction) => {
     const username = interaction.options.getString("username");
-    const alts = await requestWS("alternates", "backend", username);
+    const wantTrace = interaction.options.getBoolean("trace") ?? false;
+
+    const action = wantTrace ? "trace_alts" : "alternates";
+    const response = await requestWS(action, "backend", username);
+    
+    if (wantTrace) {
+        // Sends the response as a normal message since embeds ruin spacing
+        const formattedTree = "```text\n" + response + "```";
+
+        // Responses with the tree connection trace in a file if needed
+        if (formattedTree.length > 2000) return await interaction.reply({ 
+            files: [{
+                attachment: Buffer.from(response, "utf-8"),
+                name: `trace_${username}.txt`
+            }] 
+        });
+        else return await interaction.reply({ content: formattedTree });
+    }
+
+    // Send the quick normal embed of alts if trace is disabled 
     const altEmbed = new EmbedBuilder()
         .setTitle(`__${username}__`)
-        .setDescription(alts.join("\n") || "No alt accounts.")
+        .setDescription(response.join("\n") || "Account not registered.")
 
     await interaction.reply({ embeds: [ altEmbed ] });
 });
