@@ -39,16 +39,18 @@ class UndirectedGraph {
 
         const visited = new Set();
         const buildNode = (name) => {
+            // Early return if this network node is going to create a cycle
+            const { type, neighbors, data } = this.nodes.get(name);
+            if (visited.has(name))
+                return new NetworkNode(name, type, data, true);
+
             // Visited set to guard against infinite traversal recursion
             visited.add(name);
-
-            const { type, neighbors, data } = this.nodes.get(name);
             const treeNode = new NetworkNode(name, type, data);
 
             // Recursively build connections to any neighboring nodes
             for (const neighbor of neighbors)
-                if (!visited.has(neighbor))
-                    treeNode.connect(buildNode(neighbor));
+                treeNode.connect(buildNode(neighbor));
 
             return treeNode;
         };
@@ -62,11 +64,13 @@ class NetworkNode {
      * @param {string} name The arbitrary name identifier of the node
      * @param {string} type The type identifier of node this is representing
      * @param {Object} [data={}] Optional meta data of this node
+     * @param {boolean} [cycle=false] Flag if this node is a cycle to another
      */
-    constructor(name, type, data = {}) {
+    constructor(name, type, data = {}, cycle = false) {
         this.name = name;
         this.type = type;
         this.data = data;
+        this.cycle = cycle;
         this.connections = [];
     }
 

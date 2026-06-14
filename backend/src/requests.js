@@ -119,12 +119,13 @@ registerWsRequest("alternates", (envelope) => {
     sendWS(envelope);
 });
 
-registerWsRequest("trace_alts", (envelope) => {
+registerWsRequest("trace_alts", async (envelope) => {
     const alternates = require("../lib/alts");
-    const xuid = xuidFromUsername(envelope.payload);
+    const user = envelope.payload;
+    const xuid = xuidFromUsername(user);
 
-    // Responds with a tree structure of the trace
+    // Responds with an image of the trace tree structure
     envelope.event = "trace_response";
-    envelope.payload = alternates.trace(xuid);
+    envelope.payload = await alternates.traceImage(xuid, user);
     sendWS(envelope);
 });

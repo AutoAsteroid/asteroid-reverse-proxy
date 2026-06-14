@@ -1,6 +1,6 @@
 
 const toMilliseconds = require("ms");
-const { MessageFlags, EmbedBuilder } = require("discord.js");
+const { MessageFlags, EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const { runConsole } = require("./utils.js");
 const { requestWS } = require("./websocket.js");
 const { buildPlayerList, formatDuration } = require("./utils.js");
@@ -45,29 +45,22 @@ commands.set("alts", async (interaction) => {
     const username = interaction.options.getString("username");
     const wantTrace = interaction.options.getBoolean("trace") ?? false;
 
+    await interaction.deferReply();
     const action = wantTrace ? "trace_alts" : "alternates";
     const response = await requestWS(action, "backend", username);
     
+    // Send the generated png image of the network trace from the backend
     if (wantTrace) {
-        // Sends the response as a normal message since embeds ruin spacing
-        const formattedTree = "```text\n" + response + "```";
-
-        // Responses with the tree connection trace in a file if needed
-        if (formattedTree.length > 2000) return await interaction.reply({ 
-            files: [{
-                attachment: Buffer.from(response, "utf-8"),
-                name: `trace_${username}.txt`
-            }] 
-        });
-        else return await interaction.reply({ content: formattedTree });
+        const name = `trace_${username}.png`;
+        const trace = new AttachmentBuilder(Buffer.from(response.data), { name });
+        return await interaction.editReply({ files: [ trace ] });
     }
-
     // Send the quick normal embed of alts if trace is disabled 
     const altEmbed = new EmbedBuilder()
         .setTitle(`__${username}__`)
         .setDescription(response.join("\n") || "Account not registered.")
 
-    await interaction.reply({ embeds: [ altEmbed ] });
+    await interaction.editReply({ embeds: [ altEmbed ] });
 });
 
 permissions.set("alts", [ "Staff" ]);
